@@ -1,0 +1,132 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+# All Vagrant configuration is done below. The "2" in Vagrant.configure
+# configures the configuration version (we support older styles for
+# backwards compatibility). Please don't change it unless you know what
+# you're doing.
+Vagrant.configure("2") do |config|
+  # The most common configuration options are documented and commented below.
+  # For a complete reference, please see the online documentation at
+  # https://docs.vagrantup.com.
+
+  # Every Vagrant development environment requires a box. You can search for
+  # boxes at https://vagrantcloud.com/search.
+  config.vm.box = "centos/7"
+
+  # Disable automatic box update checking. If you disable this, then
+  # boxes will only be checked for updates when the user runs
+  # `vagrant box outdated`. This is not recommended.
+  # config.vm.box_check_update = false
+
+  # Create a forwarded port mapping which allows access to a specific port
+  # within the machine from a port on the host machine. In the example below,
+  # accessing "localhost:8080" will access port 80 on the guest machine.
+  # NOTE: This will enable public access to the opened port
+  # config.vm.network "forwarded_port", guest: 80, host: 8080
+
+  # Create a forwarded port mapping which allows access to a specific port
+  # within the machine from a port on the host machine and only allow access
+  # via 127.0.0.1 to disable public access
+config.vm.network "forwarded_port", guest: 80, host: 8080, host_ip: "127.0.0.1"
+
+  # Create a private network, which allows host-only access to the machine
+  # using a specific IP.
+  # config.vm.network "private_network", ip: "192.168.33.10"
+
+  # Create a public network, which generally matched to bridged network.
+  # Bridged networks make the machine appear as another physical device on
+  # your network.
+config.vm.network "public_network"
+
+  # Share an additional folder to the guest VM. The first argument is
+  # the path on the host to the actual folder. The second argument is
+  # the path on the guest to mount the folder. And the optional third
+  # argument is a set of non-required options.
+  # config.vm.synced_folder "../data", "/vagrant_data"
+
+  # Provider-specific configuration so you can fine-tune various
+  # backing providers for Vagrant. These expose provider-specific options.
+  # Example for VirtualBox:
+  #
+  # config.vm.provider "virtualbox" do |vb|
+  #   # Display the VirtualBox GUI when booting the machine
+  #   vb.gui = true
+  #
+  #   # Customize the amount of memory on the VM:
+  #   vb.memory = "1024"
+  # end
+  #
+  # View the documentation for the provider you are using for more
+  # information on available options.
+
+  # Enable provisioning with a shell script. Additional provisioners such as
+  # Puppet, Chef, Ansible, Salt, and Docker are also available. Please see the
+  # documentation for more information about their specific syntax and use.
+  # config.vm.provision "shell", inline: <<-SHELL
+  #   sudo apt-get update
+  #   sudo apt-get install -y apache2
+  # SHELL
+
+config.vm.provision "shell", inline: <<-SHELL
+#
+#  Task 8-1 - log  - unit - timer 30 sec - sh script
+#
+# sysconfig file
+cat << EOF > /etc/sysconfig/watchlog
+# Configuration file for my watchdog service
+# Place it to /etc/sysconfig
+# File and word in that file that we will be monit
+WORD="ALERT"
+LOG=/var/log/watchlog.log
+EOF
+# 
+# log file with alert
+echo "Log file, ALERT" > /var/log/watchlog.log
+# 
+# script                 cat /opt/watchlog.sh
+echo -e '#!/bin/bash
+WORD=$1
+LOG=$2
+DATE=$(date)
+if grep $WORD $LOG &> /dev/null
+then
+  logger $DATE": I found the word:"$WORD"!"
+else
+  exit 0
+fi' > /opt/watchlog.sh
+# +x /opt/watchlog.sh
+chmod +x /opt/watchlog.sh
+# 
+# Create unit         cat  /etc/systemd/system/watchlog.service
+echo -e '[Unit]
+Description=My watchlog service
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/sysconfig/watchlog
+ExecStart=/opt/watchlog.sh $WORD $LOG' > /etc/systemd/system/watchlog.service
+#
+systemctl start watchlog.service
+# 4 Create timer unit         cat /etc/systemd/system/timer-watchlog.timer
+echo -e '[Unit]
+Description=Run watchlog script every 30 second
+[Timer]
+# Run every 30 second
+OnUnitActiveSec=30
+Unit=watchlog.service
+[Install]
+WantedBy=multi-user.target'  > /etc/systemd/system/timer-watchlog.timer
+# 
+# enable timer - n/a before service enabled & start 
+systemctl start timer-watchlog.timer
+# enable & start service - task
+systemctl enable watchlog.service
+systemctl start watchlog.service
+# show all timers
+systemctl list-timers --all
+# Show log 
+tail -15 /var/log/messages
+#
+          SHELL
+
+end
